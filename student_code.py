@@ -116,6 +116,55 @@ class KnowledgeBase(object):
             print("Invalid ask:", fact.statement)
             return []
 
+    def kb_remove(self, fr):
+        if isinstance(fr, Fact):
+            print('removing fact', fr.statement)
+            f_ind = self.facts.index(fr)
+            temp_fact = self.facts[f_ind]
+            self.facts.remove(temp_fact)
+            for f in temp_fact.supports_facts:
+                new_ind = self.facts.index(f)
+                for fr_pair in self.facts[new_ind].supported_by:
+                    if temp_fact in fr_pair:
+                        self.facts[new_ind].supported_by.remove(fr_pair)
+                if not self.facts[new_ind].supported_by:
+                    if not self.facts[new_ind].asserted:
+                        self.kb_remove(f)
+            for r in temp_fact.supports_rules:
+                new_ind = self.rules.index(r)
+                for fr_pair in self.rules[new_ind].supported_by:
+                    if temp_fact in fr_pair:
+                        self.rules[new_ind].supported_by.remove(fr_pair)
+                if not self.rules[new_ind].supported_by:
+                    if not self.rules[new_ind].asserted:
+                        print('The rule is')
+                        print('LHS', self.rules[new_ind].lhs[0])
+                        print('RHS', self.rules[new_ind].rhs)
+                        print(' The rule is no longer supported or asserted')
+                        self.kb_remove(r)
+
+        if isinstance(fr, Rule):
+            print('removing rule', fr.lhs[0], fr.rhs)
+            r_ind = self.rules.index(fr)
+            temp_rule = self.rules[r_ind]
+            self.rules.remove(temp_rule)
+            for f in temp_rule.supports_facts:
+                new_ind = self.facts.index(f)
+                for fr_pair in self.facts[new_ind].supported_by:
+                    if temp_rule in fr_pair:
+                        self.facts[new_ind].supported_by.remove(fr_pair)
+                if not self.facts[new_ind].supported_by:
+                    if not self.facts[new_ind].asserted:
+                        self.kb_remove(f)
+            for r in temp_rule.supports_rules:
+                new_ind = self.rules.index(r)
+                for fr_pair in self.rules[new_ind].supported_by:
+                    if temp_rule in fr_pair:
+                        self.rules[new_ind].supported_by.remove(fr_pair)
+                if not self.rules[new_ind].supported_by:
+                    if not self.rules[new_ind].asserted:
+                        self.kb_remove(r)
+
     def kb_retract(self, fact_or_rule):
         """Retract a fact from the KB
 
@@ -128,7 +177,15 @@ class KnowledgeBase(object):
         printv("Retracting {!r}", 0, verbose, [fact_or_rule])
         ####################################################
         # Student code goes here
-        
+        if isinstance(fact_or_rule, Fact):
+            print('Retracting ' + str(fact_or_rule.statement))
+            if fact_or_rule in self.facts:
+                f_ind = self.facts.index(fact_or_rule)
+                if self.facts[f_ind].asserted:
+                    if self.facts[f_ind].supported_by:
+                        self.facts[f_ind].asserted = False
+                    else:
+                        self.kb_remove(fact_or_rule)
 
 class InferenceEngine(object):
     def fc_infer(self, fact, rule, kb):
@@ -146,3 +203,33 @@ class InferenceEngine(object):
             [fact.statement, rule.lhs, rule.rhs])
         ####################################################
         # Student code goes here
+        binding = match(fact.statement, rule.lhs[0])
+        supported_by = [[fact, rule]]
+        if binding:
+            if len(rule.lhs) == 1:
+                # if the current rule has only one item on the lhs you will infer a new fact
+                inst = instantiate(rule.rhs, binding)
+                newfact = Fact(inst, supported_by)
+                f_ind = kb.facts.index(fact)
+                r_ind = kb.rules.index(rule)
+                kb.facts[f_ind].supports_facts.append(newfact)
+                kb.rules[r_ind].supports_facts.append(newfact)
+                kb.kb_assert(newfact)
+
+            # if the current rule has more than one statement on the lhs, you will infer a new rule
+            else:
+                rulelist = []
+                lhslist = []
+                rhslist = instantiate(rule.rhs, binding)
+                for stmt in rule.lhs[1:]:
+                    inst = instantiate(stmt, binding)
+                    lhslist.append(inst)
+                rulelist.append(lhslist)
+                rulelist.append(rhslist)
+                newrule = Rule(rulelist, supported_by)
+
+                f_ind = kb.facts.index(fact)
+                r_ind = kb.rules.index(rule)
+                kb.facts[f_ind].supports_rules.append(newrule)
+                kb.rules[r_ind].supports_rules.append(newrule)
+                kb.kb_assert(newrule)
